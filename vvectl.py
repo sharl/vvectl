@@ -53,7 +53,8 @@ def get_vv_vram_via_pwsh():
         ps_cmd = 'Get-Counter "\\GPU Process Memory(*)\\Dedicated Usage" | Select-Object -ExpandProperty CounterSamples | ForEach-Object { "$($_.Path) : $($_.CookedValue)" }'
         result = subprocess.check_output(
             ['pwsh', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
-            stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore'
+            stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore',
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         pattern = re.compile(r'pid_(\d+).*?:\s+(\d+)')
         for pid_str, usage_str in pattern.findall(result):
