@@ -16,7 +16,7 @@ LISTEN_PORT = 50021
 APP_INTERNAL_PORT = 50022
 VRAM_LIMIT_MB = 1500
 IDLE_LIMIT = 3600
-BASE_DIR = r'C:\Users\sharl\AppData\Local\Programs\VOICEVOX\vv-engine'
+BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
 PROC_NAME = 'run.exe'
 EXE_PATH = os.path.join(BASE_DIR, PROC_NAME)
 APP_CMD = [EXE_PATH, '--host=127.0.0.1', f'--port={APP_INTERNAL_PORT}', '--use_gpu']
