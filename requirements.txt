@@ -1,0 +1,4 @@
+darkdetect
+pillow
+psutil
+pystray
