@@ -33,10 +33,11 @@ PreferredAppMode = {
 ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 
 
-def create_icon_image():
+def create_icon_image(perc, SIZE=64):
     """タスクバー用の簡易アイコン（Vの文字など）を作成"""
-    image = Image.new('RGB', (64, 64), color=(73, 109, 137))
+    image = Image.new('RGB', (SIZE, SIZE), color=(73, 109, 137))
     d = ImageDraw.Draw(image)
+    d.rectangle((0, SIZE - int(SIZE * perc / 100), SIZE, SIZE), fill=(255, 0, 0))
     d.text((10, 10), 'VVE', fill=(255, 255, 255))
     return image
 
@@ -81,9 +82,11 @@ def monitor_loop():
         idle_time = time.time() - last_access_time
         current_vram = get_vv_vram_via_pwsh()
 
-        # update tooltip
+        # update tooltip, icon
         if icon:
-            icon.title = f'VRAM: {current_vram:.1f} MB / Idle: {int(idle_time)}s'
+            perc = 100 * current_vram / VRAM_LIMIT_MB
+            icon.title = f'VRAM: {current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
+            icon.icon = create_icon_image(perc)
 
         if idle_time > IDLE_LIMIT:
             restart_logic('Idle Timeout')
@@ -130,7 +133,7 @@ if __name__ == '__main__':
     threading.Thread(target=monitor_loop, daemon=True).start()
     restart_logic('Initial Start')
 
-    icon = pystray.Icon('VVEctl', create_icon_image(), 'Starting...')
+    icon = pystray.Icon('VVEctl', create_icon_image(0), 'Starting...')
     icon.menu = pystray.Menu(
         pystray.MenuItem('Manual Restart', lambda: restart_logic('Manual Request')),
         pystray.MenuItem('Exit', lambda: icon.stop())
