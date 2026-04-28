@@ -25,6 +25,7 @@ APP_CMD = [EXE_PATH, '--host=127.0.0.1', f'--port={APP_INTERNAL_PORT}', '--use_g
 last_access_time = time.time()
 current_vram = 0.0
 icon = None
+enable_idle = False
 PreferredAppMode = {
     'Light': 0,
     'Dark': 1,
@@ -66,6 +67,11 @@ def get_vv_vram_via_pwsh():
     return total_mib / 1024 / 1024
 
 
+def toggle_idle(_, __):
+    global enable_idle
+    enable_idle = not enable_idle
+
+
 def restart_logic(reason):
     print(f'[{time.strftime('%H:%M:%S')}] {reason}')
     subprocess.run(['taskkill', '/F', '/IM', PROC_NAME, '/T'],
@@ -76,7 +82,7 @@ def restart_logic(reason):
 
 
 def monitor_loop():
-    global last_access_time, current_vram, icon
+    global last_access_time, current_vram, icon, enable_idle
     while True:
         time.sleep(15)
         idle_time = time.time() - last_access_time
@@ -85,10 +91,13 @@ def monitor_loop():
         # update tooltip, icon
         if icon:
             perc = 100 * current_vram / VRAM_LIMIT_MB
-            icon.title = f'VRAM: {current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
+            if enable_idle:
+                icon.title = f'VRAM: {current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
+            else:
+                icon.title = f'VRAM: {current_vram:.1f} MB / {perc:.1f} %'
             icon.icon = create_icon_image(perc)
 
-        if idle_time > IDLE_LIMIT:
+        if enable_idle and idle_time > IDLE_LIMIT:
             restart_logic('Idle Timeout')
             last_access_time = time.time()
         elif current_vram > VRAM_LIMIT_MB and idle_time > 30:
@@ -136,6 +145,7 @@ if __name__ == '__main__':
     icon = pystray.Icon('VVEctl', create_icon_image(0), 'Starting...')
     icon.menu = pystray.Menu(
         pystray.MenuItem('Manual Restart', lambda: restart_logic('Manual Request')),
+        pystray.MenuItem('Enable Idle Timeout', toggle_idle, checked=lambda _: enable_idle),
         pystray.MenuItem('Exit', lambda: icon.stop())
     )
     icon.run()
