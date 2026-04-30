@@ -26,6 +26,13 @@ last_access_time = time.time()
 current_vram = 0.0
 icon = None
 enable_idle = False
+COLORS = {
+    80: (255, 75, 0),
+    70: (246, 170, 0),
+    60: (242, 231, 0),
+    50: (0, 176, 107),
+    20: (25, 113, 255),
+}
 PreferredAppMode = {
     'Light': 0,
     'Dark': 1,
@@ -35,10 +42,13 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 
 
 def create_icon_image(perc, SIZE=64):
-    """タスクバー用の簡易アイコン（Vの文字など）を作成"""
     image = Image.new('RGB', (SIZE, SIZE), color=(73, 109, 137))
     d = ImageDraw.Draw(image)
-    d.rectangle((0, SIZE - int(SIZE * perc / 100), SIZE, SIZE), fill=(255, 0, 0))
+    if perc > 0:
+        for c in COLORS:
+            if perc > c:
+                d.rectangle((0, SIZE - int(SIZE * perc / 100), SIZE, SIZE), fill=COLORS[c])
+                break
     d.text((10, 10), 'VVE', fill=(255, 255, 255))
     return image
 
