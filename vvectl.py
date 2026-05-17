@@ -26,12 +26,17 @@ last_access_time = time.time()
 current_vram = 0.0
 icon = None
 enable_idle = False
+# https://www.jma.go.jp/jma/kishou/info/colorguide/HPColorGuide_202007.pdf
 COLORS = {
-    80: (255, 75, 0),
-    70: (246, 170, 0),
-    60: (242, 231, 0),
-    50: (0, 176, 107),
-    20: (25, 113, 255),
+    90: (180, 0, 104),
+    80: (165, 0, 33),
+    70: (255, 40, 0),
+    60: (255, 133, 0),
+    50: (254, 230, 0),
+    40: (250, 230, 150),
+    30: (0, 65, 255),
+    20: (0, 170, 255),
+    10: (242, 242, 255),
 }
 PreferredAppMode = {
     'Light': 0,
@@ -46,7 +51,7 @@ def create_icon_image(perc, SIZE=64):
     d = ImageDraw.Draw(image)
     if perc > 0:
         for c in COLORS:
-            if perc > c:
+            if perc >= c:
                 d.rectangle((0, SIZE - int(SIZE * perc / 100), SIZE, SIZE), fill=COLORS[c])
                 break
     d.text((10, 10), 'VVE', fill=(255, 255, 255))
