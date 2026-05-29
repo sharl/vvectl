@@ -14,7 +14,7 @@ import pystray
 
 LISTEN_PORT = 50021
 APP_INTERNAL_PORT = 50022
-VRAM_LIMIT_MB = 1500
+VRAM_LIMIT_MB = 1536
 IDLE_LIMIT = 3600
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
 PROC_NAME = 'run.exe'
