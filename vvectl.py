@@ -47,24 +47,15 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 class menu_mib:
     def __init__(self, vram_size_gb):
         self._unit = ' MB'
-        self._unit_b = 1024      # MB
-        self._unit_m = 1         # MB 係数
 
-        step = self._unit_b * vram_size_gb // 2 // SUBMENU_LEN
-        if step >= 1024:
-            self._unit = ' GB'
-            self._unit_b = 1     # GB
-            self._unit_m = 1024  # MB 係数
-        step = self._unit_b * vram_size_gb // 2 // SUBMENU_LEN
-
-        self.range = range(step, self._unit_b * vram_size_gb // 2 + 1, step)
-        self.list = [f'{m}{self._unit}' for m in self.range]
+        defaults = [512, 1024, 1536, 2048]
+        step = 1024 * vram_size_gb // 2 // SUBMENU_LEN
+        self.range = range(step, 1024 * vram_size_gb // 2 + 1, step)
+        b = sorted(list(set([m for m in self.range] + defaults)))
+        self.list = [f'{m}{self._unit}' for m in b if self.to_mib(m) <= (1024 * vram_size_gb // 2)]
 
     def to_mib(self, item):
-        # guard
-        if str(item) in self.list:
-            return int(str(item).removesuffix(self._unit)) * self._unit_m    # MB に変換
-        return self.to_mib(self.list[1])
+        return int(str(item).removesuffix(self._unit))
 
 
 class TaskTray:
