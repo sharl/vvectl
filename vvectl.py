@@ -89,8 +89,8 @@ class TaskTray:
             self.vram_gb = int(vrams[0].get('vram', 0) // (1024 * 1024 * 1024))
 
             # DEBUG
-            self.gpuname = 'NVIDIA RTX PRO 6000 Blackwell'
-            self.vram_gb = 96
+            # self.gpuname = 'NVIDIA RTX PRO 6000 Blackwell'
+            # self.vram_gb = 96
             # DEBUG
 
         # 搭載メモリ量に応じたサブメニューを設定
