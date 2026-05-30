@@ -52,11 +52,39 @@ class TaskTray:
         self.last_access_time = time.time()
         self.current_vram = 0.0
         self.enable_idle = False
+        self.vram_limit_mb = VRAM_LIMIT_MB
 
         image = self.create_icon_image(0)
+
+        self.gpuname = ''
+        self.vram_gb = 0
+        vrams = self.get_vram_info_via_pwsh()
+        if vrams:
+            # use first GPU detected
+            self.gpuname = vrams[0].get('name', '')
+            # gibibyte
+            self.vram_gb = int(vrams[0].get('vram', 0) // (1024 * 1024 * 1024))
+
+        # 512MB 単位のサブメニュー
+        vram_limit_submenu = [
+            MenuItem(f'{self.gpuname} {self.vram_gb} GB', lambda: False),
+            Menu.SEPARATOR,
+        ]
+        for step in range(512, 1024 * self.vram_gb // 2, 512):
+            vram_limit_submenu.append(
+                MenuItem(
+                    f'{step} MB',
+                    self.set_vram_limit,
+                    checked=lambda x: self.vram_limit_checked(x),
+                ),
+            )
+
         main_menu = Menu(
+            MenuItem('VOICEVOX Engine control', lambda: False),
+            Menu.SEPARATOR,
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Request')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
+            MenuItem('VRAM limit', Menu(*vram_limit_submenu)),
             Menu.SEPARATOR,
             MenuItem('Exit', self.stopApp),
         )
@@ -72,6 +100,12 @@ class TaskTray:
                     break
         d.text((10, 10), TITLE, fill=(255, 255, 255))
         return image
+
+    def set_vram_limit(self, _, item):
+        self.vram_limit_mb = int(str(item).removesuffix(' MB'))
+
+    def vram_limit_checked(self, item):
+        return int(str(item).removesuffix(' MB')) == self.vram_limit_mb
 
     def get_vram_info_via_pwsh(self):
         """pwsh 7 を使用してVRAM容量取得"""
@@ -145,7 +179,7 @@ class TaskTray:
             self.current_vram = self.get_vv_vram_via_pwsh()
 
             # update tooltip
-            perc = 100 * self.current_vram / VRAM_LIMIT_MB
+            perc = 100 * self.current_vram / self.vram_limit_mb
             if self.enable_idle:
                 self.app.title = f'VRAM: {self.current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
             else:
@@ -156,7 +190,7 @@ class TaskTray:
             if self.enable_idle and idle_time > IDLE_LIMIT:
                 self.restart_logic('Idle Timeout')
                 self.last_access_time = time.time()
-            elif self.current_vram > VRAM_LIMIT_MB and idle_time > 30:
+            elif self.current_vram > self.vram_limit_mb and idle_time > 30:
                 self.restart_logic(f'VRAM Leak ({self.current_vram:.1f} MB)')
                 self.last_access_time = time.time()
 
