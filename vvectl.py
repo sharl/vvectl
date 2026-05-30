@@ -17,7 +17,7 @@ TITLE = 'VVEctl'
 
 LISTEN_PORT = 50021
 APP_INTERNAL_PORT = 50022
-VRAM_LIMIT_MB = 1536
+SUBMENU_LEN = 8         # greater than 8
 IDLE_LIMIT = 3600
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
 PROC_NAME = 'run.exe'
@@ -44,6 +44,29 @@ PreferredAppMode = {
 ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 
 
+class menu_mib:
+    def __init__(self, vram_size_gb):
+        self._unit = ' MB'
+        self._unit_b = 1024      # MB
+        self._unit_m = 1         # MB 係数
+
+        step = self._unit_b * vram_size_gb // 2 // SUBMENU_LEN
+        if step >= 1024:
+            self._unit = ' GB'
+            self._unit_b = 1     # GB
+            self._unit_m = 1024  # MB 係数
+        step = self._unit_b * vram_size_gb // 2 // SUBMENU_LEN
+
+        self.range = range(step, self._unit_b * vram_size_gb // 2 + 1, step)
+        self.list = [f'{m}{self._unit}' for m in self.range]
+
+    def to_mib(self, item):
+        # guard
+        if str(item) in self.list:
+            return int(str(item).removesuffix(self._unit)) * self._unit_m    # MB に変換
+        return self.to_mib(self.list[1])
+
+
 class TaskTray:
     def __init__(self):
         self.stop_event = threading.Event()
@@ -52,10 +75,10 @@ class TaskTray:
         self.last_access_time = time.time()
         self.current_vram = 0.0
         self.enable_idle = False
-        self.vram_limit_mb = VRAM_LIMIT_MB
 
         image = self.create_icon_image(0)
 
+        # GPU / VRAM 設定
         self.gpuname = ''
         self.vram_gb = 0
         vrams = self.get_vram_info_via_pwsh()
@@ -65,19 +88,24 @@ class TaskTray:
             # gibibyte
             self.vram_gb = int(vrams[0].get('vram', 0) // (1024 * 1024 * 1024))
 
-        # 512MB 単位のサブメニュー
+            # DEBUG
+            self.gpuname = 'NVIDIA RTX PRO 6000 Blackwell'
+            self.vram_gb = 96
+            # DEBUG
+
+        # 搭載メモリ量に応じたサブメニューを設定
         vram_limit_submenu = [
             MenuItem(f'{self.gpuname} {self.vram_gb} GB', lambda: False),
             Menu.SEPARATOR,
         ]
-        for step in range(512, 1024 * self.vram_gb // 2, 512):
+        self.mibs = menu_mib(self.vram_gb)
+        for i in self.mibs.list:
             vram_limit_submenu.append(
-                MenuItem(
-                    f'{step} MB',
-                    self.set_vram_limit,
-                    checked=lambda x: self.vram_limit_checked(x),
-                ),
+                MenuItem(i, self.set_vram_limit, checked=lambda x: self.vram_limit_checked(x)),
             )
+
+        # VRAM 上限の設定
+        self.vram_limit_mb = self.mibs.to_mib(self.mibs.list[1])
 
         main_menu = Menu(
             MenuItem('VOICEVOX Engine control', lambda: False),
@@ -102,10 +130,11 @@ class TaskTray:
         return image
 
     def set_vram_limit(self, _, item):
-        self.vram_limit_mb = int(str(item).removesuffix(' MB'))
+        self.vram_limit_mb = self.mibs.to_mib(item)
+        print(f'[{time.strftime('%H:%M:%S')}] set limit to {self.vram_limit_mb}')
 
     def vram_limit_checked(self, item):
-        return int(str(item).removesuffix(' MB')) == self.vram_limit_mb
+        return self.mibs.to_mib(item) == self.vram_limit_mb
 
     def get_vram_info_via_pwsh(self):
         """pwsh 7 を使用してVRAM容量取得"""
