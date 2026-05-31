@@ -2,6 +2,8 @@
 from dataclasses import asdict, dataclass
 import ctypes
 import json
+import logging
+import logging.handlers
 import os
 import re
 import socket
@@ -15,6 +17,7 @@ import darkdetect as dd
 import psutil
 
 from config import Config
+from getLog import getLog
 
 TITLE = 'VVEctl'
 
@@ -51,6 +54,20 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 @dataclass
 class Setting:
     vram_limit_mb: int
+
+
+# logger settings
+logname = getLog(TITLE, 'log.log')
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.handlers.RotatingFileHandler(logname, encoding='utf-8', maxBytes=1000000, backupCount=0),
+        logging.StreamHandler(),
+    ],
+    datefmt='%Y/%m/%d %X'
+)
+logger = logging.getLogger(TITLE)
+logger.setLevel(logging.DEBUG)
 
 
 class menu_mib:
@@ -145,7 +162,7 @@ class TaskTray:
 
     def set_vram_limit(self, _, item):
         self.vram_limit_mb = self.mibs.to_mib(item)
-        print(f'[{time.strftime('%H:%M:%S')}] set limit to {self.vram_limit_mb}')
+        logger.info(f'set limit to {self.vram_limit_mb}')
         self.save_config()
 
     def vram_limit_checked(self, item):
@@ -208,7 +225,7 @@ class TaskTray:
         self.enable_idle = not self.enable_idle
 
     def restart_logic(self, reason):
-        print(f'[{time.strftime('%H:%M:%S')}] {reason}')
+        logger.info(reason)
         subprocess.run(['taskkill', '/F', '/IM', PROC_NAME, '/T'],
                        creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True)
         time.sleep(5)
