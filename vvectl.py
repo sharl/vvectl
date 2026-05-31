@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from dataclasses import asdict, dataclass
 import ctypes
 import json
 import os
@@ -12,6 +13,8 @@ from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
 import darkdetect as dd
 import psutil
+
+from config import Config
 
 TITLE = 'VVEctl'
 
@@ -44,6 +47,12 @@ PreferredAppMode = {
 ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 
 
+# 保存する設定の型定義
+@dataclass
+class Setting:
+    vram_limit_mb: int
+
+
 class menu_mib:
     def __init__(self, vram_size_gb):
         self._unit = ' MB'
@@ -61,6 +70,7 @@ class menu_mib:
 class TaskTray:
     def __init__(self):
         self.stop_event = threading.Event()
+        self.config = Config(TITLE)
 
         # 最後に proxy にアクセスした時刻
         self.last_access_time = time.time()
@@ -97,6 +107,8 @@ class TaskTray:
 
         # VRAM 上限の設定
         self.vram_limit_mb = self.mibs.to_mib(self.mibs.list[1])
+        # 設定から VRAM 上限を読み込み
+        self.load_config()
 
         main_menu = Menu(
             MenuItem('VOICEVOX Engine control', lambda: False),
@@ -108,6 +120,17 @@ class TaskTray:
             MenuItem('Exit', self.stopApp),
         )
         self.app = Icon(name=f'PYTHON.win32.{TITLE}', title='Starting...', icon=image, menu=main_menu)
+
+    def load_config(self):
+        try:
+            setting = Setting(**self.config.load())
+            self.vram_limit_mb = setting.vram_limit_mb
+        except TypeError:
+            pass
+
+    def save_config(self):
+        setting = Setting(vram_limit_mb=self.vram_limit_mb)
+        self.config.save(asdict(setting))
 
     def create_icon_image(self, perc, SIZE=64):
         image = Image.new('RGB', (SIZE, SIZE), color=(73, 109, 137))
@@ -123,6 +146,7 @@ class TaskTray:
     def set_vram_limit(self, _, item):
         self.vram_limit_mb = self.mibs.to_mib(item)
         print(f'[{time.strftime('%H:%M:%S')}] set limit to {self.vram_limit_mb}')
+        self.save_config()
 
     def vram_limit_checked(self, item):
         return self.mibs.to_mib(item) == self.vram_limit_mb
