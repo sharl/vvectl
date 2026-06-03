@@ -286,7 +286,7 @@ class TaskTray:
                 self.restart_logic('Idle Timeout')
                 self.last_access_time = time.time()
             elif self.current_vram > self.vram_limit_mb and idle_time > 30:
-                self.restart_logic(f'VRAM Leak ({self.current_vram:.1f} MB)')
+                self.restart_logic(f'VRAM Leak ({self.current_vram:.1f} / {self.vram_limit_mb} MB)')
                 self.last_access_time = time.time()
 
     def bridge(self, src, dst):
