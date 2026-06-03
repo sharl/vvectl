@@ -54,7 +54,23 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 @dataclass
 class Setting:
     vram_limit_mb: int
+    theme: str
 
+
+THEMES = {
+    'Default': {
+        'bg': (73, 109, 137),
+        'fg': (255, 255, 255),
+    },
+    'black / white': {
+        'bg': (0, 0, 0),
+        'fg': (255, 255, 255),
+    },
+    'VOICEVOX': {
+        'bg': (165, 212, 173),
+        'fg': (0, 0, 0),
+    },
+}
 
 # logger settings
 logname = getLog(TITLE, 'log.log')
@@ -88,6 +104,7 @@ class TaskTray:
     def __init__(self):
         self.stop_event = threading.Event()
         self.config = Config(TITLE)
+        self.theme = list(THEMES)[0]            # Default
 
         # 最後に proxy にアクセスした時刻
         self.last_access_time = time.time()
@@ -127,8 +144,16 @@ class TaskTray:
         # 設定から VRAM 上限を読み込み
         self.load_config()
 
+        # icon theme submenu
+        theme_submenu = []
+        for theme in THEMES:
+            theme_submenu.append(
+                MenuItem(theme, self.set_theme, checked=lambda x: str(x) == self.theme),
+            )
+
         main_menu = Menu(
             MenuItem('VOICEVOX Engine control', lambda: False),
+            MenuItem('Theme', Menu(*theme_submenu)),
             Menu.SEPARATOR,
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Request')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
@@ -142,22 +167,31 @@ class TaskTray:
         try:
             setting = Setting(**self.config.load())
             self.vram_limit_mb = setting.vram_limit_mb
+            self.theme = setting.theme
         except TypeError:
             pass
 
     def save_config(self):
-        setting = Setting(vram_limit_mb=self.vram_limit_mb)
+        setting = Setting(vram_limit_mb=self.vram_limit_mb, theme=self.theme)
         self.config.save(asdict(setting))
 
+    def set_theme(self, _, item):
+        self.theme = str(item)
+        self.save_config()
+
     def create_icon_image(self, perc, SIZE=64):
-        image = Image.new('RGB', (SIZE, SIZE), color=(73, 109, 137))
+        theme = THEMES.get(self.theme)
+        if theme is None:
+            theme = list(THEMES)[0]             # Default
+
+        image = Image.new('RGB', (SIZE, SIZE), color=theme['bg'])
         d = ImageDraw.Draw(image)
         if perc > 0:
             for c in COLORS:
                 if perc >= c:
                     d.rectangle((0, SIZE - int(SIZE * perc / 100), SIZE, SIZE), fill=COLORS[c])
                     break
-        d.text((10, 10), TITLE, fill=(255, 255, 255))
+        d.text((10, 10), TITLE, fill=theme['fg'])
         return image
 
     def set_vram_limit(self, _, item):
