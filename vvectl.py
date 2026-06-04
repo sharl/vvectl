@@ -156,7 +156,7 @@ class TaskTray:
             MenuItem('VOICEVOX Engine control', lambda: False),
             MenuItem('Theme', Menu(*theme_submenu)),
             Menu.SEPARATOR,
-            MenuItem('Manual Restart', lambda: self.restart_logic('Manual Request')),
+            MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
             MenuItem('VRAM limit', Menu(*vram_limit_submenu)),
             Menu.SEPARATOR,
@@ -265,8 +265,9 @@ class TaskTray:
         self.enable_idle = not self.enable_idle
         self.save_config()
 
-    def restart_logic(self, reason):
-        logger.info(reason)
+    def restart_logic(self, reason=None):
+        if reason:
+            logger.info(reason)
         subprocess.run(['taskkill', '/F', '/IM', PROC_NAME, '/T'],
                        creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True)
         time.sleep(5)
@@ -334,7 +335,7 @@ class TaskTray:
 
         threading.Thread(target=self.proxy_handler, daemon=True).start()
         threading.Thread(target=self.monitor_loop, daemon=True).start()
-        self.restart_logic('Initial Start')
+        self.restart_logic()
 
         self.app.run()
 
