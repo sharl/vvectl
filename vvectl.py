@@ -54,6 +54,7 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 @dataclass
 class Setting:
     vram_limit_mb: int
+    enable_idle: bool
     theme: str
 
 
@@ -167,12 +168,17 @@ class TaskTray:
         try:
             setting = Setting(**self.config.load())
             self.vram_limit_mb = setting.vram_limit_mb
+            self.enable_idle = setting.enable_idle
             self.theme = setting.theme
         except TypeError:
             pass
 
     def save_config(self):
-        setting = Setting(vram_limit_mb=self.vram_limit_mb, theme=self.theme)
+        setting = Setting(
+            vram_limit_mb=self.vram_limit_mb,
+            enable_idle=self.enable_idle,
+            theme=self.theme
+        )
         self.config.save(asdict(setting))
 
     def set_theme(self, _, item):
@@ -257,6 +263,7 @@ class TaskTray:
 
     def toggle_idle(self, _, __):
         self.enable_idle = not self.enable_idle
+        self.save_config()
 
     def restart_logic(self, reason):
         logger.info(reason)
