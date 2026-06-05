@@ -2,3 +2,4 @@ darkdetect
 pillow
 psutil
 pystray
+six

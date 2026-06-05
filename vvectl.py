@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import threading
 import time
 
@@ -18,6 +19,7 @@ import psutil
 
 from config import Config
 from getLog import getLog
+from isDirectML import isDML
 
 TITLE = 'VVEctl'
 
@@ -87,6 +89,13 @@ logger = logging.getLogger(TITLE)
 logger.setLevel(logging.DEBUG)
 
 
+# 最小限の win32con
+class win32con:
+    MB_OK = 0x00000000
+    MB_ICONERROR = 0x00000010
+    MB_TOPMOST = 0x00040000
+
+
 class menu_mib:
     def __init__(self, vram_size_gb):
         self._unit = ' MB'
@@ -103,6 +112,12 @@ class menu_mib:
 
 class TaskTray:
     def __init__(self):
+        if not isDML():
+            text = 'DirectML 対応の GPU が見つかりません\n\nアプリケーションを終了します'
+            style = win32con.MB_OK | win32con.MB_ICONERROR | win32con.MB_TOPMOST
+            ctypes.windll.user32.MessageBoxW(None, text, TITLE, style)
+            sys.exit()
+
         self.stop_event = threading.Event()
         self.config = Config(TITLE)
         self.theme = list(THEMES)[0]            # Default
