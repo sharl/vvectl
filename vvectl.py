@@ -20,6 +20,7 @@ import psutil
 from config import Config
 from getLog import getLog
 from isDirectML import isDML
+from utils import resource_path
 
 TITLE = 'VVEctl'
 
@@ -110,6 +111,16 @@ class menu_mib:
         return int(str(item).removesuffix(self._unit))
 
 
+def getVersion():
+    v = 'test'
+    try:
+        with open(resource_path('Assets/version.txt')) as fd:
+            v = fd.read().strip().removeprefix('v')
+    except Exception:
+        pass
+    return v
+
+
 class TaskTray:
     def __init__(self):
         if not isDML():
@@ -168,7 +179,7 @@ class TaskTray:
             )
 
         main_menu = Menu(
-            MenuItem('VOICEVOX Engine control', lambda: False),
+            MenuItem(f'VOICEVOX Engine control {getVersion()}', lambda: False),
             MenuItem('Theme', Menu(*theme_submenu)),
             Menu.SEPARATOR,
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),

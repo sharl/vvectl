@@ -17,3 +17,10 @@ python -m venv .venv
 pip install -r requirements.txt
 python vvectl.py
 ```
+
+## Build
+
+```powershell
+pip install pyinstaller
+pyinstaller vvectl.py --onefile --noconsole --icon Assets/sample.ico --add-data "Assets/version.txt;Assets"
+```
