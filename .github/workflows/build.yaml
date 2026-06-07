@@ -32,6 +32,7 @@ jobs:
             "--noconsole" `
             "--icon=Assets/sample.ico" `
             "--exclude-module=PIL._avif" `
+            "--exclude-module=PIL._webp" `
             "--exclude-module=PIL._imagingcms" `
             "--add-data=Assets/version.txt;Assets"
           pushd dist
