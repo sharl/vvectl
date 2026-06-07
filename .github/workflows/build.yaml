@@ -17,9 +17,9 @@ jobs:
         with:
           python-version: 3.12
 
-      - name: Install pyinstaller and dependencies
+      - name: Install PyInstaller and dependencies
         run: |
-          python -m pip install --upgrade -r requirements.txt pip pyinstaller
+          python -m pip install --upgrade -r requirements.txt pip PyInstaller
 
       - name: set version
         run: |
@@ -27,9 +27,15 @@ jobs:
 
       - name: Create executable file with pyinstaller and zip
         run: |
-          pyinstaller vvectl.py --onefile --noconsole --icon Assets/sample.ico --add-data "Assets/version.txt;Assets"
+          pyinstaller ${{ github.event.repository.name }}.py `
+            "--onefile" `
+            "--noconsole" `
+            "--icon=Assets/sample.ico" `
+            "--exclude-module=PIL._avif" `
+            "--exclude-module=PIL._imagingcms" `
+            "--add-data=Assets/version.txt;Assets"
           pushd dist
-          Compress-Archive -Path . -DestinationPath ${{ github.event.repository.name }}-${{ env.VERSION }}.zip
+          Compress-Archive -Path "${{ github.event.repository.name }}.exe" -DestinationPath "${{ github.event.repository.name }}-${{ env.VERSION }}.zip"
           popd
 
       - name: Upload a executable file to GitHub Releases
