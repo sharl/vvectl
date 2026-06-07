@@ -9,7 +9,7 @@ https://aka.ms/install-powershell
 
 ## Run
 
-```
+```powershell
 git clone https://github.com/sharl/vvectl.git
 cd vvectl
 python -m venv .venv
@@ -22,5 +22,5 @@ python vvectl.py
 
 ```powershell
 pip install pyinstaller
-pyinstaller vvectl.py --onefile --noconsole --icon Assets/sample.ico --add-data "Assets/version.txt;Assets"
+pyinstaller "vvectl.py" "--onefile" "--noconsole" "--icon=Assets/sample.ico" "--exclude-module=PIL._avif" "--exclude-module=PIL._webp" "--exclude-module=PIL._imagingcms" "--add-data=Assets/version.txt;Assets"
 ```
