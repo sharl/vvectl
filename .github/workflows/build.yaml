@@ -3,6 +3,10 @@ on:
   push:
     tags:
     - "v*"
+  workflow_dispatch:
+
+env:
+  APP_NAME: ${{ github.event.repository.name }}
 
 permissions:
   contents: write
@@ -23,11 +27,16 @@ jobs:
 
       - name: set version
         run: |
-          Write-Output ("VERSION=" + ("${{ github.ref_name }}" -replace 'v', '')) >> "$env:GITHUB_ENV"
+          if ("${{ github.ref_type }}" -eq "tag") {
+              $ver = "${{ github.ref_name }}" -replace 'v', ''
+          } else {
+              $ver = "test"
+          }
+          Write-Output "VERSION=$ver" >> "$env:GITHUB_ENV"
 
       - name: Create executable file with pyinstaller and zip
         run: |
-          pyinstaller ${{ github.event.repository.name }}.py `
+          pyinstaller "${env:APP_NAME}.py" `
             "--onefile" `
             "--noconsole" `
             "--icon=Assets/sample.ico" `
@@ -36,11 +45,11 @@ jobs:
             "--exclude-module=PIL._imagingcms" `
             "--add-data=Assets/version.txt;Assets"
           pushd dist
-          Compress-Archive -Path "${{ github.event.repository.name }}.exe" -DestinationPath "${{ github.event.repository.name }}-${{ env.VERSION }}.zip"
+          Compress-Archive -Path "${env:APP_NAME}.exe" -DestinationPath "${env:APP_NAME}-${{ env.VERSION }}.zip"
           popd
 
       - name: Upload a executable file to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/${{ github.event.repository.name }}-${{ env.VERSION }}.zip
+            dist/${{ env.APP_NAME }}-${{ env.VERSION }}.zip
