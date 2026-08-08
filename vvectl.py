@@ -239,7 +239,7 @@ class TaskTray:
         ps_cmd = (
             "Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue | "
             "Where-Object { $_.GetValue('HardwareInformation.qwMemorySize') } | "
-            "ForEach-Object { [PSCustomObject]@{ name = $_.GetValue('HardwareInformation.AdapterString'); vram = $_.GetValue('HardwareInformation.qwMemorySize'); } } |  "
+            "ForEach-Object { [PSCustomObject]@{ name = $_.GetValue('HardwareInformation.AdapterString'); vram = $_.GetValue('HardwareInformation.qwMemorySize'); } } | "
             "ConvertTo-Json; exit 0"
         )
 
