@@ -139,22 +139,32 @@ class TaskTray:
         self.current_vram = 0.0
         self.enable_idle = False
 
+        # 他プロセスが使用しているプロセス名と VRAM 使用量
+        self.top_process_name = None
+        self.top_vram = 0.0
+
         image = self.create_icon_image(0)
 
         # GPU / VRAM 設定
         self.gpuname = ''
         self.vram_gb = 0
+        self.vram_mb = 0
         vrams = self.get_vram_info_via_pwsh()
         if vrams:
             # use first GPU detected
             self.gpuname = vrams[0].get('name', '')
             # gibibyte
             self.vram_gb = int(vrams[0].get('vram', 0) // (1024 * 1024 * 1024))
+            # mebibyte, insurance
+            self.vram_mb = (self.vram_gb - 1) * 1024
 
             # DEBUG
             # self.gpuname = 'NVIDIA RTX PRO 6000 Blackwell'
             # self.vram_gb = 96
+            # self.vram_mb = (self.vram_gb - 1) * 1024
             # DEBUG
+        # VRAM overflow limit
+        self.limit = self.vram_mb
 
         # 搭載メモリ量に応じたサブメニューを設定
         # (1) VVE VRAM limit
@@ -178,7 +188,7 @@ class TaskTray:
                 MenuItem(i, self.set_opv_threshold, checked=lambda x: self.opv_threshold_checked(x)),
             )
         # Other Process VRAM threshold の設定
-        self.opv_threshold_mb = self.opv_mibs.to_mib(self.opv_mibs.list[1])
+        self.opv_threshold_mb = self.opv_mibs.to_mib(self.opv_mibs.list[-1])
 
         self.load_config()
 
@@ -286,15 +296,25 @@ class TaskTray:
         except json.JSONDecodeError:
             return []
 
-    def get_vv_vram_via_pwsh(self):
+    def get_vram_usage_via_pwsh(self) -> list[int, str | None, int]:
         """pwsh 7 を使用してVRAM取得"""
-        total_mib = 0
-        try:
-            vv_pids = [p.info['pid'] for p in psutil.process_iter(['name', 'pid'])
-                       if p.info['name'] and p.info['name'].lower() == PROC_NAME.lower()]
-            if not vv_pids:
-                return 0.0
+        # VVE current usage
+        current_vram = 0
+        # top process
+        top_process_name = None
+        top_vram = 0
 
+        pids = {}
+        try:
+            # get process list
+            for p in psutil.process_iter(['name', 'pid']):
+                pid = p.info['pid']
+                name = p.info['name']
+                # desktop window manager は常に VRAM 上限を返すので除外
+                if name and name.lower() != 'dwm.exe':
+                    pids[pid] = name
+
+            # get process vram usage list
             ps_cmd = 'Get-Counter "\\GPU Process Memory(*)\\Dedicated Usage" | Select-Object -ExpandProperty CounterSamples | ForEach-Object { "$($_.Path) : $($_.CookedValue)" }'
             result = subprocess.check_output(
                 ['pwsh', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
@@ -302,12 +322,32 @@ class TaskTray:
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             pattern = re.compile(r'pid_(\d+).*?:\s+(\d+)')
+            usages = {}
             for pid_str, usage_str in pattern.findall(result):
-                if int(pid_str) in vv_pids:
-                    total_mib += int(usage_str)
+                pid = int(pid_str)
+                if pid in pids:
+                    name = pids[pid]
+                    if name not in usages:
+                        usages[name] = 0
+                    usages[name] += int(usage_str)
+
+            # find VVE and most usage process
+            for name in sorted(usages, key=lambda n: usages[n]):
+                mem = usages[name]
+                if mem != 0:
+                    # if mem >= self.opv_threshold_mb * 1024 * 1024:
+                    #     print(f'{name:24}\t{mem / 1024 / 1024:8.1f} MB')
+                    if name.lower() == PROC_NAME.lower():
+                        current_vram = mem
+                    else:
+                        if mem >= self.opv_threshold_mb * 1024 * 1024:
+                            ext = '.' + name.rsplit('.', 1)[-1]
+                            top_process_name = name.removesuffix(ext)
+                            top_vram = mem
+
         except Exception:
             pass
-        return total_mib / 1024 / 1024
+        return current_vram / 1024 / 1024, top_process_name, top_vram / 1024 / 1024
 
     def toggle_idle(self, _, __):
         self.enable_idle = not self.enable_idle
@@ -327,10 +367,26 @@ class TaskTray:
             if self.stop_event.wait(15):
                 break
             idle_time = time.time() - self.last_access_time
-            self.current_vram = self.get_vv_vram_via_pwsh()
+            # VVE current usage, top process name, top process usage
+            self.current_vram, top_process_name, top_vram = self.get_vram_usage_via_pwsh()
+
+            if top_process_name:
+                if self.top_process_name != top_process_name:
+                    logger.info(f'found {top_process_name} {top_vram:.1f} / {self.opv_threshold_mb} MB: set limit to {self.vram_limit_mb}')
+                    self.limit = self.vram_limit_mb
+                    self.top_vram = top_vram
+            else:
+                if self.top_process_name != top_process_name:
+                    logger.info('unset limit')
+                    self.limit = self.vram_mb
+                    self.top_vram = 0.0
+
+            self.top_process_name = top_process_name
+
+            # print(f'current {self.current_vram:.1f} / {self.limit} top {self.top_process_name} {self.top_vram:.1f} / {self.opv_threshold_mb}')
 
             # update tooltip
-            perc = 100 * self.current_vram / self.vram_limit_mb
+            perc = 100 * self.current_vram / self.limit
             if self.enable_idle:
                 self.app.title = f'VRAM: {self.current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
             else:
@@ -341,8 +397,8 @@ class TaskTray:
             if self.enable_idle and idle_time > IDLE_LIMIT:
                 self.restart_logic('Idle Timeout')
                 self.last_access_time = time.time()
-            elif self.current_vram > self.vram_limit_mb and idle_time > 30:
-                self.restart_logic(f'VRAM Leak ({self.current_vram:.1f} / {self.vram_limit_mb} MB)')
+            elif self.current_vram > self.limit and idle_time > 30:
+                self.restart_logic(f'VRAM overflow ({self.current_vram:.1f} / {self.limit} MB)')
                 self.last_access_time = time.time()
 
     def bridge(self, src, dst):
