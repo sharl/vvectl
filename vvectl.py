@@ -57,6 +57,7 @@ ctypes.windll['uxtheme.dll'][135](PreferredAppMode[dd.theme()])
 @dataclass
 class Setting:
     vram_limit_mb: int
+    opv_threshold_mb: int
     enable_idle: bool
     theme: str
 
@@ -156,6 +157,7 @@ class TaskTray:
             # DEBUG
 
         # 搭載メモリ量に応じたサブメニューを設定
+        # (1) VVE VRAM limit
         vram_limit_submenu = [
             MenuItem(f'{self.gpuname} {self.vram_gb} GB', lambda: False),
             Menu.SEPARATOR,
@@ -165,10 +167,19 @@ class TaskTray:
             vram_limit_submenu.append(
                 MenuItem(i, self.set_vram_limit, checked=lambda x: self.vram_limit_checked(x)),
             )
-
         # VRAM 上限の設定
         self.vram_limit_mb = self.mibs.to_mib(self.mibs.list[1])
-        # 設定から VRAM 上限を読み込み
+
+        # (2) Other Process VRAM threshold
+        opv_threshold_submenu = []
+        self.opv_mibs = menu_mib(self.vram_gb)
+        for i in self.mibs.list:
+            opv_threshold_submenu.append(
+                MenuItem(i, self.set_opv_threshold, checked=lambda x: self.opv_threshold_checked(x)),
+            )
+        # Other Process VRAM threshold の設定
+        self.opv_threshold_mb = self.opv_mibs.to_mib(self.opv_mibs.list[1])
+
         self.load_config()
 
         # icon theme submenu
@@ -184,7 +195,8 @@ class TaskTray:
             Menu.SEPARATOR,
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
-            MenuItem('VRAM limit', Menu(*vram_limit_submenu)),
+            MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
+            MenuItem('VOCEVOX Engine VRAM limit', Menu(*vram_limit_submenu)),
             Menu.SEPARATOR,
             MenuItem('Exit', self.stopApp),
         )
@@ -194,6 +206,7 @@ class TaskTray:
         try:
             setting = Setting(**self.config.load())
             self.vram_limit_mb = setting.vram_limit_mb
+            self.opv_threshold_mb = setting.opv_threshold_mb
             self.enable_idle = setting.enable_idle
             self.theme = setting.theme
         except TypeError:
@@ -202,6 +215,7 @@ class TaskTray:
     def save_config(self):
         setting = Setting(
             vram_limit_mb=self.vram_limit_mb,
+            opv_threshold_mb=self.opv_threshold_mb,
             enable_idle=self.enable_idle,
             theme=self.theme
         )
@@ -233,6 +247,14 @@ class TaskTray:
 
     def vram_limit_checked(self, item):
         return self.mibs.to_mib(item) == self.vram_limit_mb
+
+    def set_opv_threshold(self, _, item):
+        self.opv_threshold_mb = self.opv_mibs.to_mib(item)
+        logger.info(f'set other process threshold to {self.opv_threshold_mb}')
+        self.save_config()
+
+    def opv_threshold_checked(self, item):
+        return self.opv_mibs.to_mib(item) == self.opv_threshold_mb
 
     def get_vram_info_via_pwsh(self):
         """pwsh 7 を使用してVRAM容量取得"""
