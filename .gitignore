@@ -7,3 +7,4 @@ dist/
 .exp/
 *.log
 *.ps1
+*.exe
