@@ -387,10 +387,11 @@ class TaskTray:
 
             # update tooltip
             perc = 100 * self.current_vram / self.limit
+            topic = f'Limit: {self.limit} MB\n' if self.limit != self.vram_mb else ''
             if self.enable_idle:
-                self.app.title = f'VRAM: {self.current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
+                self.app.title = f'{topic}VRAM: {self.current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
             else:
-                self.app.title = f'VRAM: {self.current_vram:.1f} MB / {perc:.1f} %'
+                self.app.title = f'{topic}VRAM: {self.current_vram:.1f} MB / {perc:.1f} %'
             # update icon
             self.app.icon = self.create_icon_image(perc)
 
