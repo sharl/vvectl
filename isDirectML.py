@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
+import os
+import shutil
 import subprocess
 import sys
 import traceback
@@ -11,7 +13,7 @@ def isDML() -> bool:
     try:
         gpus: str = subprocess.check_output(
             [
-                'pwsh',
+                'pwsh.exe',
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
@@ -37,7 +39,10 @@ def isDML() -> bool:
 
     except Exception:
         log.write_text(
-            traceback.format_exc(),
+            f'PATH={os.environ.get("PATH")!r}\n'
+            f'which pwsh={shutil.which("pwsh")!r}\n'
+            f'which pwsh.exe={shutil.which("pwsh.exe")!r}\n'
+            + traceback.format_exc(),
             encoding='utf-8',
         )
         return False
