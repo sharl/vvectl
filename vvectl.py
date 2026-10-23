@@ -29,6 +29,15 @@ APP_INTERNAL_PORT = 50022
 SUBMENU_LEN = 8         # greater than 8
 IDLE_LIMIT = 3600
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
+if not os.path.exists(BASE_DIR):
+    # search alternate path for 0.26.0~
+    appdata = os.environ.get('APPDATA')
+    path = os.path.join(appdata, r'voicevox\vvpp-engines')
+    if os.path.exists(path):
+        for target_dir in os.listdir(path):
+            if target_dir.startswith('VOICEVOX_Engine+'):
+                BASE_DIR = os.path.join(path, target_dir)
+                break
 PROC_NAME = 'run.exe'
 EXE_PATH = os.path.join(BASE_DIR, PROC_NAME)
 APP_CMD = [EXE_PATH, '--host=127.0.0.1', f'--port={APP_INTERNAL_PORT}', '--use_gpu']
