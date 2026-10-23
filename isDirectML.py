@@ -13,7 +13,7 @@ def isDML() -> bool:
     try:
         gpus: str = subprocess.check_output(
             [
-                'pwsh.exe',
+                'powershell.exe',
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
