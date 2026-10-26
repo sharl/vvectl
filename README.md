@@ -2,11 +2,6 @@
 
 Reduce VRAM consumption of VOICEVOX Engine with GPU
 
-## Prerequisite
-
-PowerShell 7
-https://aka.ms/install-powershell
-
 ## Run
 
 ```powershell
