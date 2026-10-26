@@ -133,7 +133,8 @@ def getVersion():
 
 class TaskTray:
     def __init__(self):
-        if not isDML():
+        gpu_name = isDML()
+        if not gpu_name:
             text = 'DirectML 対応の GPU が見つかりません\n\nアプリケーションを終了します'
             style = win32con.MB_OK | win32con.MB_ICONERROR | win32con.MB_TOPMOST
             ctypes.windll.user32.MessageBoxW(None, text, TITLE, style)
@@ -155,7 +156,7 @@ class TaskTray:
         image = self.create_icon_image(0)
 
         # GPU / VRAM 設定
-        self.gpuname = ''
+        self.gpuname = gpu_name
         self.vram_gb = 0
         self.vram_mb = 0
         vrams = self.get_vram_info_via_pwsh()
@@ -276,7 +277,7 @@ class TaskTray:
         return self.opv_mibs.to_mib(item) == self.opv_threshold_mb
 
     def get_vram_info_via_pwsh(self):
-        """pwsh 7 を使用してVRAM容量取得"""
+        """powershell を使用してVRAM容量取得"""
         ps_cmd = (
             "Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue | "
             "Where-Object { $_.GetValue('HardwareInformation.qwMemorySize') } | "
@@ -286,7 +287,7 @@ class TaskTray:
 
         try:
             stdout = subprocess.check_output(
-                ["pwsh", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
                 stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore',
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
@@ -306,7 +307,7 @@ class TaskTray:
             return []
 
     def get_vram_usage_via_pwsh(self) -> list[int, str | None, int]:
-        """pwsh 7 を使用してVRAM取得"""
+        """powershell を使用してVRAM取得"""
         # VVE current usage
         current_vram = 0
         # top process
@@ -326,7 +327,7 @@ class TaskTray:
             # get process vram usage list
             ps_cmd = 'Get-Counter "\\GPU Process Memory(*)\\Dedicated Usage" | Select-Object -ExpandProperty CounterSamples | ForEach-Object { "$($_.Path) : $($_.CookedValue)" }'
             result = subprocess.check_output(
-                ['pwsh', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
                 stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore',
                 creationflags=subprocess.CREATE_NO_WINDOW
             )

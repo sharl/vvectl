@@ -2,25 +2,27 @@
 import subprocess
 
 
-def isDML() -> bool:
+def isDML() -> str:
     try:
         gpus: str = subprocess.check_output(
             [
-                'pwsh',
+                'powershell.exe',
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
                 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name',
             ],
             encoding='utf-8',
-            timeout=5,
+            timeout=15,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         dmls = ['gtx', 'rtx', 'radeon', 'arc', 'iris', 'uhd', 'qualcomm']
         for gpu in gpus.split('\n'):
-            if any(kw in gpu.lower() for kw in dmls):
-                return True
+            for kw in dmls:
+                if kw in gpu.lower():
+                    return gpu
 
-        return False
     except Exception:
-        return False
+        pass
+
+    return ''
