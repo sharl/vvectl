@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
 import darkdetect as dd
 import psutil
+import requests
 
 from config import Config
 from getLog import getLog
@@ -24,10 +25,14 @@ from utils import resource_path
 
 TITLE = 'VVEctl'
 
+BIND_ADDRESS = '127.0.0.1'
 LISTEN_PORT = 50021
 APP_INTERNAL_PORT = 50022
 SUBMENU_LEN = 8         # greater than 8
 IDLE_LIMIT = 3600
+SWEEP_INTERVAL = 1800
+SWEEP_THREAD_NAME = 'sweep_loop'
+SWEEP_NEVER_LABEL = 'Never sweep'
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
 if not os.path.exists(BASE_DIR):
     # search alternate path for 0.26.0~
@@ -40,7 +45,7 @@ if not os.path.exists(BASE_DIR):
                 break
 PROC_NAME = 'run.exe'
 EXE_PATH = os.path.join(BASE_DIR, PROC_NAME)
-APP_CMD = [EXE_PATH, '--host=127.0.0.1', f'--port={APP_INTERNAL_PORT}', '--use_gpu']
+APP_CMD = [EXE_PATH, f'--host={BIND_ADDRESS}', f'--port={APP_INTERNAL_PORT}', '--use_gpu']
 
 # https://www.jma.go.jp/jma/kishou/info/colorguide/HPColorGuide_202007.pdf
 COLORS = {
@@ -69,6 +74,7 @@ class Setting:
     opv_threshold_mb: int
     enable_idle: bool
     theme: str
+    sweep_interval: int
 
 
 THEMES = {
@@ -148,6 +154,8 @@ class TaskTray:
         self.last_access_time = time.time()
         self.current_vram = 0.0
         self.enable_idle = False
+        self.sweep_stop_event = threading.Event()
+        self.sweep_interval = SWEEP_INTERVAL
 
         # 他プロセスが使用しているプロセス名と VRAM 使用量
         self.top_process_name = None
@@ -200,8 +208,6 @@ class TaskTray:
         # Other Process VRAM threshold の設定
         self.opv_threshold_mb = self.opv_mibs.to_mib(self.opv_mibs.list[-1])
 
-        self.load_config()
-
         # icon theme submenu
         theme_submenu = []
         for theme in THEMES:
@@ -209,12 +215,26 @@ class TaskTray:
                 MenuItem(theme, self.set_theme, checked=lambda x: str(x) == self.theme),
             )
 
+        # Sweep interval の設定
+        sweep_interval_submenu = [
+            MenuItem(SWEEP_NEVER_LABEL, self.set_sweep_interval, checked=lambda x: self.sweep_interval_checked(x)),
+        ]
+        for t in range(SWEEP_INTERVAL, SWEEP_INTERVAL * 6 + 1, SWEEP_INTERVAL):
+            sweep_interval_submenu.append(
+                MenuItem(f'{t}s', self.set_sweep_interval, checked=lambda x: self.sweep_interval_checked(x)),
+            )
+
+        self.load_config()
+
         main_menu = Menu(
             MenuItem(f'VOICEVOX Engine control {getVersion()}', lambda: False),
             MenuItem('Theme', Menu(*theme_submenu)),
             Menu.SEPARATOR,
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
+            Menu.SEPARATOR,
+            MenuItem('Sweep interval', Menu(*sweep_interval_submenu)),
+            Menu.SEPARATOR,
             MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
             MenuItem('VOCEVOX Engine VRAM limit', Menu(*vram_limit_submenu)),
             Menu.SEPARATOR,
@@ -229,6 +249,7 @@ class TaskTray:
             self.opv_threshold_mb = setting.opv_threshold_mb
             self.enable_idle = setting.enable_idle
             self.theme = setting.theme
+            self.sweep_interval = setting.sweep_interval
         except TypeError:
             pass
 
@@ -237,7 +258,8 @@ class TaskTray:
             vram_limit_mb=self.vram_limit_mb,
             opv_threshold_mb=self.opv_threshold_mb,
             enable_idle=self.enable_idle,
-            theme=self.theme
+            theme=self.theme,
+            sweep_interval=self.sweep_interval,
         )
         self.config.save(asdict(setting))
 
@@ -275,6 +297,86 @@ class TaskTray:
 
     def opv_threshold_checked(self, item):
         return self.opv_mibs.to_mib(item) == self.opv_threshold_mb
+
+    def _detect_sweep_thread(self):
+        threads = [th.name for th in threading.enumerate()]
+        logger.debug(f'running threads: {threads}')
+        return SWEEP_THREAD_NAME in threads
+
+    def _start_sweep_thread(self):
+        self.sweep_stop_event.clear()
+        threading.Thread(target=self.sweep_loop, name=SWEEP_THREAD_NAME, daemon=True).start()
+
+    def _sweep(self):
+        server_url = f'http://{BIND_ADDRESS}:{APP_INTERNAL_PORT}'
+        session = requests.Session()
+
+        try:
+            speakers = session.get(f'{server_url}/speakers', timeout=5).json()
+            for speaker in speakers:
+                for style in speaker['styles']:
+                    sid = style['id']
+                    name = f"{speaker['name']}({style['name']})"
+
+                    initialized = session.get(f'{server_url}/is_initialized_speaker?speaker={sid}').json()
+                    if initialized:
+                        # すでにロード済みなら初期化する
+                        session.post(
+                            f'{server_url}/initialize_speaker',
+                            params={
+                                'speaker': sid,
+                                'skip_reinit': 'false'
+                            },
+                            timeout=5,
+                        )
+                        logger.info(f'initialized {name}')
+        except Exception:
+            pass
+
+    def sweep_loop(self):
+        logger.info(f'start {SWEEP_THREAD_NAME}')
+
+        while not self.sweep_stop_event.is_set():
+            begin = time.perf_counter()
+
+            if self.sweep_interval:
+                self._sweep()
+
+            elapsed = time.perf_counter() - begin
+            sleep_time = max(1, self.sweep_interval - elapsed)
+            if self.sweep_stop_event.wait(sleep_time):
+                break
+
+        logger.info(f'stopped {SWEEP_THREAD_NAME}')
+
+    def set_sweep_interval(self, _, _item):
+        item = str(_item)
+        if item == SWEEP_NEVER_LABEL:
+            interval = 0
+        else:
+            interval = int(item.removesuffix('s'))
+
+        if self.sweep_interval != interval:
+            self.sweep_interval = interval
+            self.save_config()
+
+            logger.info(f'set sweep interval to {self.sweep_interval}')
+
+            # stop sweep
+            self.sweep_stop_event.set()
+            # wait
+            while self._detect_sweep_thread():
+                self.stop_event.wait(0.1)
+            # start sweep
+            self._start_sweep_thread()
+
+    def sweep_interval_checked(self, _item):
+        item = str(_item)
+        if item == SWEEP_NEVER_LABEL:
+            interval = 0
+        else:
+            interval = int(item.removesuffix('s'))
+        return self.sweep_interval == interval
 
     def get_vram_info_via_pwsh(self):
         """powershell を使用してVRAM容量取得"""
@@ -435,13 +537,14 @@ class TaskTray:
             self.last_access_time = time.time()
             try:
                 app_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                app_sock.connect(('127.0.0.1', APP_INTERNAL_PORT))
+                app_sock.connect((BIND_ADDRESS, APP_INTERNAL_PORT))
                 threading.Thread(target=self.bridge, args=(client_sock, app_sock), daemon=True).start()
                 threading.Thread(target=self.bridge, args=(app_sock, client_sock), daemon=True).start()
             except Exception:
                 client_sock.close()
 
     def stopApp(self):
+        self.sweep_stop_event.set()
         self.stop_event.set()
         self.app.stop()
 
@@ -450,6 +553,7 @@ class TaskTray:
 
         threading.Thread(target=self.proxy_handler, daemon=True).start()
         threading.Thread(target=self.monitor_loop, daemon=True).start()
+        self._start_sweep_thread()
         self.restart_logic()
 
         self.app.run()
