@@ -1,5 +1,10 @@
+certifi
+charset-normalizer
 darkdetect
+idna
 pillow
 psutil
 pystray
+requests
 six
+urllib3
