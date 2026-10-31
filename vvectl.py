@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 from dataclasses import asdict, dataclass
 import ctypes
-import json
 import logging
 import logging.handlers
 import os
-import re
 import socket
 import subprocess
 import sys
@@ -15,13 +13,13 @@ import time
 from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
 import darkdetect as dd
-import psutil
 import requests
 
 from config import Config
 from getLog import getLog
 from isDirectML import isDML
 from utils import resource_path
+from getVRAMInfo import get_vram_info, get_vram_usages
 
 TITLE = 'VVEctl'
 
@@ -167,7 +165,7 @@ class TaskTray:
         self.gpuname = gpu_name
         self.vram_gb = 0
         self.vram_mb = 0
-        vrams = self.get_vram_info_via_pwsh()
+        vrams = get_vram_info()
         if vrams:
             # use first GPU detected
             self.gpuname = vrams[0].get('name', '')
@@ -378,77 +376,23 @@ class TaskTray:
             interval = int(item.removesuffix('s'))
         return self.sweep_interval == interval
 
-    def get_vram_info_via_pwsh(self):
-        """powershell を使用してVRAM容量取得"""
-        ps_cmd = (
-            "Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue | "
-            "Where-Object { $_.GetValue('HardwareInformation.qwMemorySize') } | "
-            "ForEach-Object { [PSCustomObject]@{ name = $_.GetValue('HardwareInformation.AdapterString'); vram = $_.GetValue('HardwareInformation.qwMemorySize'); } } | "
-            "ConvertTo-Json; exit 0"
-        )
-
-        try:
-            stdout = subprocess.check_output(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-                stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore',
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return []
-
-        if not stdout.strip():
-            return []
-
-        # 単一GPUの場合も list で返す
-        try:
-            data = json.loads(stdout)
-            if isinstance(data, dict):
-                return [data]
-            return data
-        except json.JSONDecodeError:
-            return []
-
-    def get_vram_usage_via_pwsh(self) -> list[int, str | None, int]:
-        """powershell を使用してVRAM取得"""
+    def get_vram_usage(self) -> list[int, str | None, int]:
         # VVE current usage
         current_vram = 0
         # top process
         top_process_name = None
         top_vram = 0
 
-        pids = {}
         try:
-            # get process list
-            for p in psutil.process_iter(['name', 'pid']):
-                pid = p.info['pid']
-                name = p.info['name']
-                # desktop window manager は常に VRAM 上限を返すので除外
-                if name and name.lower() != 'dwm.exe':
-                    pids[pid] = name
-
-            # get process vram usage list
-            ps_cmd = 'Get-Counter "\\GPU Process Memory(*)\\Dedicated Usage" | Select-Object -ExpandProperty CounterSamples | ForEach-Object { "$($_.Path) : $($_.CookedValue)" }'
-            result = subprocess.check_output(
-                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
-                stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore',
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-            pattern = re.compile(r'pid_(\d+).*?:\s+(\d+)')
-            usages = {}
-            for pid_str, usage_str in pattern.findall(result):
-                pid = int(pid_str)
-                if pid in pids:
-                    name = pids[pid]
-                    if name not in usages:
-                        usages[name] = 0
-                    usages[name] += int(usage_str)
-
+            usages = get_vram_usages()
             # find VVE and most usage process
             for name in sorted(usages, key=lambda n: usages[n]):
+                # desktop window manager と explorer は除外
+                if name.lower() in ['dwm.exe', 'explorer.exe']:
+                    continue
+
                 mem = usages[name]
                 if mem != 0:
-                    # if mem >= self.opv_threshold_mb * 1024 * 1024:
-                    #     print(f'{name:24}\t{mem / 1024 / 1024:8.1f} MB')
                     if name.lower() == PROC_NAME.lower():
                         current_vram = mem
                     else:
@@ -456,7 +400,6 @@ class TaskTray:
                             ext = '.' + name.rsplit('.', 1)[-1]
                             top_process_name = name.removesuffix(ext)
                             top_vram = mem
-
         except Exception:
             pass
         return current_vram / 1024 / 1024, top_process_name, top_vram / 1024 / 1024
@@ -480,7 +423,7 @@ class TaskTray:
                 break
             idle_time = time.time() - self.last_access_time
             # VVE current usage, top process name, top process usage
-            self.current_vram, top_process_name, top_vram = self.get_vram_usage_via_pwsh()
+            self.current_vram, top_process_name, top_vram = self.get_vram_usage()
 
             if top_process_name:
                 if self.top_process_name != top_process_name:
