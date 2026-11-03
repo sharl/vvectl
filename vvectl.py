@@ -33,6 +33,7 @@ SWEEP_INTERVAL = 1800
 SLOW_SWEEP_INTERVAL = 2
 SWEEP_THREAD_NAME = 'sweep_loop'
 SWEEP_NEVER_LABEL = 'Never sweep'
+SIGD = 6        # significant digit
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
 if not os.path.exists(BASE_DIR):
     # search alternate path for 0.26.0~
@@ -164,6 +165,7 @@ class TaskTray:
         self.sweep_cache = dict()
         # sum sweep cache
         self.count_total = 0
+        self.lfu_threshold = 1 / 200            # デフォルト 可変にする予定
 
         # 他プロセスが使用しているプロセス名と VRAM 使用量
         self.top_process_name = None
@@ -223,7 +225,7 @@ class TaskTray:
                 MenuItem(theme, self.set_theme, checked=lambda x: str(x) == self.theme),
             )
 
-        # Sweep interval の設定
+        # Force Sweep interval の設定
         sweep_interval_submenu = [
             MenuItem(SWEEP_NEVER_LABEL, self.set_sweep_interval, checked=lambda x: self.sweep_interval_checked(x)),
         ]
@@ -241,7 +243,7 @@ class TaskTray:
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
             Menu.SEPARATOR,
-            MenuItem('Sweep interval', Menu(*sweep_interval_submenu)),
+            MenuItem('Force Sweep interval', Menu(*sweep_interval_submenu)),
             Menu.SEPARATOR,
             MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
             MenuItem('VOCEVOX Engine VRAM limit', Menu(*vram_limit_submenu)),
@@ -427,6 +429,8 @@ class TaskTray:
         time.sleep(5)
         subprocess.Popen(APP_CMD, cwd=BASE_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=subprocess.CREATE_NO_WINDOW)
+        self.sweep_cache.clear()
+        self.count_total = 0
 
     def monitor_loop(self):
         while not self.stop_event.is_set():
@@ -473,9 +477,7 @@ class TaskTray:
             self.app.icon = self.create_icon_image(perc)
 
             ############################################################
-            # initialize the least-used speaker
-            least_used_limit = 1 / 500
-
+            # initialize least frequently used speaker
             total = 0
             rates = dict()
             for sid in self.sweep_cache:
@@ -484,7 +486,7 @@ class TaskTray:
                 for sid in self.sweep_cache:
                     rates[sid] = self.sweep_cache[sid] / total
             if rates and total != self.count_total:
-                def lfmt(v: float, sigd: int = 6):
+                def lfmt(v: float, sigd: int = SIGD):
                     return f'{v + 1 / (10 ** (sigd + 1)):.{sigd}f}'
 
                 self.count_total = total
@@ -492,7 +494,7 @@ class TaskTray:
                 snt = 4
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
                 cache = dict()
-                print(f'{total:>10d} {lfmt(least_used_limit)} ----')
+                print(f'{total:>10d} {lfmt(self.lfu_threshold)} ----')
                 for sid in list(ars[:snt]) + list(ars[-snt:]):
                     if sid not in cache:
                         cache[sid] = True
@@ -501,10 +503,10 @@ class TaskTray:
                 lsid = ars[-1]
                 count = self.sweep_cache[lsid]
                 rate = count / total
-                if rate < least_used_limit:
+                if rate < self.lfu_threshold:
                     begin = time.perf_counter()
                     self._sweep(lsid)
-                    logger.debug(f'initialized {lsid} least used {lfmt(rate)}: {count} / {total}')
+                    logger.info(f'initialized lfu id {lsid} {lfmt(rate)}: {count:.{SIGD}f} / {total}')
                     del self.sweep_cache[lsid]
 
                     elapsed = time.perf_counter() - begin
