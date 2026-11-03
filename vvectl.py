@@ -340,7 +340,7 @@ class TaskTray:
             pass
 
     def sweep_loop(self):
-        logger.info(f'start {SWEEP_THREAD_NAME}')
+        logger.debug(f'start {SWEEP_THREAD_NAME}')
         self.sweep_cache.clear()
 
         while not self.sweep_stop_event.is_set():
@@ -356,7 +356,7 @@ class TaskTray:
             if self.sweep_stop_event.wait(sleep_time):
                 break
 
-        logger.info(f'stopped {SWEEP_THREAD_NAME}')
+        logger.debug(f'stopped {SWEEP_THREAD_NAME}')
 
     def set_sweep_interval(self, _, _item):
         item = str(_item)
@@ -484,17 +484,19 @@ class TaskTray:
                 for sid in self.sweep_cache:
                     rates[sid] = self.sweep_cache[sid] / total
             if rates and total != self.count_total:
+                def lfmt(v: float, sigd: int = 6):
+                    return f'{v + 1 / (10 ** (sigd + 1)):.{sigd}f}'
+
                 self.count_total = total
 
                 snt = 4
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
                 cache = dict()
-
-                print(f'{total=} {round(least_used_limit, 6)} ----')
+                print(f'{total:>10d} {lfmt(least_used_limit)} ----')
                 for sid in list(ars[:snt]) + list(ars[-snt:]):
                     if sid not in cache:
                         cache[sid] = True
-                        print(f'{sid:>3} {self.sweep_cache[sid]:>5} {round(rates[sid], 6)} {self.speakers[sid]}')
+                        print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]}')
 
                 lsid = ars[-1]
                 count = self.sweep_cache[lsid]
@@ -502,9 +504,10 @@ class TaskTray:
                 if rate < least_used_limit:
                     begin = time.perf_counter()
                     self._sweep(lsid)
-                    elapsed = time.perf_counter() - begin
-                    logger.debug(f'initialized {lsid} {elapsed:.1f}: least used {rate}: {count} / {total}')
+                    logger.debug(f'initialized {lsid} least used {lfmt(rate)}: {count} / {total}')
                     del self.sweep_cache[lsid]
+
+                    elapsed = time.perf_counter() - begin
                     sleep_time = max(0.1, SLOW_SWEEP_INTERVAL - elapsed)
                     self.sweep_stop_event.wait(sleep_time)
             ############################################################
@@ -536,7 +539,7 @@ class TaskTray:
                         # usage count up
                         count = self.sweep_cache.get(speaker_id, 0)
                         self.sweep_cache.update({speaker_id: count + 1})
-                        print(path, speaker_id)
+                        # print(path, speaker_id)
                         return
 
     def bridge(self, src, dst):
