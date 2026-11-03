@@ -490,7 +490,7 @@ class TaskTray:
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
                 cache = dict()
 
-                print(f'{total=} {rouund(least_used_limit, 6)} ----')
+                print(f'{total=} {round(least_used_limit, 6)} ----')
                 for sid in list(ars[:snt]) + list(ars[-snt:]):
                     if sid not in cache:
                         cache[sid] = True
