@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from dataclasses import asdict, dataclass
+from urllib.parse import urlsplit, parse_qs
 import ctypes
 import logging
 import logging.handlers
@@ -29,6 +30,7 @@ APP_INTERNAL_PORT = 50022
 SUBMENU_LEN = 8         # greater than 8
 IDLE_LIMIT = 3600
 SWEEP_INTERVAL = 1800
+SLOW_SWEEP_INTERVAL = 2
 SWEEP_THREAD_NAME = 'sweep_loop'
 SWEEP_NEVER_LABEL = 'Never sweep'
 BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA'), r'Programs\VOICEVOX\vv-engine')
@@ -148,12 +150,20 @@ class TaskTray:
         self.config = Config(TITLE)
         self.theme = list(THEMES)[0]            # Default
 
+        self.server_url = f'http://{BIND_ADDRESS}:{APP_INTERNAL_PORT}'
+        self.session = requests.Session()
+        self.speakers = dict()
+
         # 最後に proxy にアクセスした時刻
         self.last_access_time = time.time()
         self.current_vram = 0.0
         self.enable_idle = False
         self.sweep_stop_event = threading.Event()
         self.sweep_interval = SWEEP_INTERVAL
+        # speaker_id: count
+        self.sweep_cache = dict()
+        # sum sweep cache
+        self.count_total = 0
 
         # 他プロセスが使用しているプロセス名と VRAM 使用量
         self.top_process_name = None
@@ -305,40 +315,41 @@ class TaskTray:
         self.sweep_stop_event.clear()
         threading.Thread(target=self.sweep_loop, name=SWEEP_THREAD_NAME, daemon=True).start()
 
-    def _sweep(self):
-        server_url = f'http://{BIND_ADDRESS}:{APP_INTERNAL_PORT}'
-        session = requests.Session()
-
+    def _sweep(self, speaker_id):
         try:
-            speakers = session.get(f'{server_url}/speakers', timeout=5).json()
-            for speaker in speakers:
+            for speaker in self.speakers:
                 for style in speaker['styles']:
-                    sid = style['id']
-                    name = f"{speaker['name']}({style['name']})"
-
-                    initialized = session.get(f'{server_url}/is_initialized_speaker?speaker={sid}').json()
+                    initialized = self.session.get(f'{self.server_url}/is_initialized_speaker?speaker={speaker_id}').json()
                     if initialized:
                         # すでにロード済みなら初期化する
-                        session.post(
-                            f'{server_url}/initialize_speaker',
+                        begin = time.perf_counter()
+                        self.session.post(
+                            f'{self.server_url}/initialize_speaker',
                             params={
-                                'speaker': sid,
+                                'speaker': speaker_id,
                                 'skip_reinit': 'false'
                             },
                             timeout=5,
                         )
-                        logger.info(f'initialized {name}')
+                        elapsed = time.perf_counter() - begin
+                        logger.info(f'initialized {self.speakers[speaker_id]} {elapsed:.1f}')
+                        sleep_time = max(0.1, SLOW_SWEEP_INTERVAL - elapsed)
+                        if self.sweep_stop_event.wait(sleep_time):
+                            break
         except Exception:
             pass
 
     def sweep_loop(self):
         logger.info(f'start {SWEEP_THREAD_NAME}')
+        self.sweep_cache.clear()
 
         while not self.sweep_stop_event.is_set():
             begin = time.perf_counter()
 
+            # force sweep all speaker id
             if self.sweep_interval:
-                self._sweep()
+                for sid in self.speakers:
+                    self._sweep(sid)
 
             elapsed = time.perf_counter() - begin
             sleep_time = max(1, self.sweep_interval - elapsed)
@@ -421,6 +432,17 @@ class TaskTray:
         while not self.stop_event.is_set():
             if self.stop_event.wait(15):
                 break
+
+            # update self.speakers
+            if not self.speakers:
+                speakers = self.session.get(f'{self.server_url}/speakers', timeout=5).json()
+                for speaker in speakers:
+                    for style in speaker['styles']:
+                        sid = str(style['id'])
+                        name = f"{speaker['name']}({style['name']})"
+                        self.speakers[sid] = name
+                logger.debug('update speakers')
+
             idle_time = time.time() - self.last_access_time
             # VVE current usage, top process name, top process usage
             self.current_vram, top_process_name, top_vram = self.get_vram_usage()
@@ -450,12 +472,72 @@ class TaskTray:
             # update icon
             self.app.icon = self.create_icon_image(perc)
 
+            ############################################################
+            # initialize the least-used speaker
+            least_used_limit = 1 / 500
+
+            total = 0
+            rates = dict()
+            for sid in self.sweep_cache:
+                total += self.sweep_cache[sid]
+            if total:
+                for sid in self.sweep_cache:
+                    rates[sid] = self.sweep_cache[sid] / total
+            if rates and total != self.count_total:
+                self.count_total = total
+
+                snt = 4
+                ars = sorted(rates, key=lambda x: rates[x], reverse=True)
+                cache = dict()
+
+                print(f'{total=} {rouund(least_used_limit, 6)} ----')
+                for sid in list(ars[:snt]) + list(ars[-snt:]):
+                    if sid not in cache:
+                        cache[sid] = True
+                        print(f'{sid:>3} {self.sweep_cache[sid]:>5} {round(rates[sid], 6)} {self.speakers[sid]}')
+
+                lsid = ars[-1]
+                count = self.sweep_cache[lsid]
+                rate = count / total
+                if rate < least_used_limit:
+                    begin = time.perf_counter()
+                    self._sweep(lsid)
+                    elapsed = time.perf_counter() - begin
+                    logger.debug(f'initialized {lsid} {elapsed:.1f}: least used {rate}: {count} / {total}')
+                    del self.sweep_cache[lsid]
+                    sleep_time = max(0.1, SLOW_SWEEP_INTERVAL - elapsed)
+                    self.sweep_stop_event.wait(sleep_time)
+            ############################################################
+
             if self.enable_idle and idle_time > IDLE_LIMIT:
                 self.restart_logic('Idle Timeout')
                 self.last_access_time = time.time()
             elif self.current_vram > self.limit and idle_time > 30:
                 self.restart_logic(f'VRAM overflow ({self.current_vram:.1f} / {self.limit} MB)')
                 self.last_access_time = time.time()
+
+    def sniff(self, data):
+        line = ''
+        try:
+            line = data.decode('ascii').splitlines()[0]
+        except Exception:
+            return
+
+        tmp = line.split()
+        if tmp[0] in ('POST', 'post'):
+            for p in tmp[1:]:
+                if 'speaker=' in p:
+                    spr = urlsplit(p)
+                    path = spr.path
+                    if 'audio_query' in path:
+                        query = spr.query
+                        params = parse_qs(query)
+                        speaker_id = params.get('speaker')[0]
+                        # usage count up
+                        count = self.sweep_cache.get(speaker_id, 0)
+                        self.sweep_cache.update({speaker_id: count + 1})
+                        print(path, speaker_id)
+                        return
 
     def bridge(self, src, dst):
         try:
@@ -464,6 +546,10 @@ class TaskTray:
                 if not data:
                     break
                 dst.sendall(data)
+                try:
+                    self.sniff(data)
+                except Exception:
+                    pass
         except Exception:
             pass
         finally:
