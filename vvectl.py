@@ -76,6 +76,7 @@ class Setting:
     enable_idle: bool
     theme: str
     sweep_interval: int
+    lfu_threshold: int
 
 
 THEMES = {
@@ -160,12 +161,12 @@ class TaskTray:
         self.current_vram = 0.0
         self.enable_idle = False
         self.sweep_stop_event = threading.Event()
-        self.sweep_interval = SWEEP_INTERVAL
+        self.sweep_interval = 0                 # Never sweep
         # speaker_id: count
         self.sweep_cache = dict()
         # sum sweep cache
         self.count_total = 0
-        self.lfu_threshold = 1 / 200            # デフォルト 可変にする予定
+        self.lfu_threshold = 200
 
         # 他プロセスが使用しているプロセス名と VRAM 使用量
         self.top_process_name = None
@@ -225,6 +226,13 @@ class TaskTray:
                 MenuItem(theme, self.set_theme, checked=lambda x: str(x) == self.theme),
             )
 
+        # Least Frequentli Used threshold submenu
+        lfu_threshold_submenu = []
+        for th in range(100, 1000 + 1, 100):
+            lfu_threshold_submenu.append(
+                MenuItem(f'1 / {th}', self.set_lfu_threshold, checked=lambda x: self.lfu_threshold_checked(x)),
+            )
+
         # Force Sweep interval の設定
         sweep_interval_submenu = [
             MenuItem(SWEEP_NEVER_LABEL, self.set_sweep_interval, checked=lambda x: self.sweep_interval_checked(x)),
@@ -243,6 +251,7 @@ class TaskTray:
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
             Menu.SEPARATOR,
+            MenuItem('Least Frequentlu Used threshold', Menu(*lfu_threshold_submenu)),
             MenuItem('Force Sweep interval', Menu(*sweep_interval_submenu)),
             Menu.SEPARATOR,
             MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
@@ -260,6 +269,7 @@ class TaskTray:
             self.enable_idle = setting.enable_idle
             self.theme = setting.theme
             self.sweep_interval = setting.sweep_interval
+            self.lfu_threshold = setting.lfu_threshold
         except TypeError:
             pass
 
@@ -270,6 +280,7 @@ class TaskTray:
             enable_idle=self.enable_idle,
             theme=self.theme,
             sweep_interval=self.sweep_interval,
+            lfu_threshold=self.lfu_threshold,
         )
         self.config.save(asdict(setting))
 
@@ -359,6 +370,18 @@ class TaskTray:
                 break
 
         logger.debug(f'stopped {SWEEP_THREAD_NAME}')
+
+    def set_lfu_threshold(self, _, item):
+        lfu_threshold = int(str(item).split(' / ')[-1])
+
+        if self.lfu_threshold != lfu_threshold:
+            self.lfu_threshold = lfu_threshold
+            self.save_config()
+
+            logger.info(f'set least frequently used threshold to 1 / {self.lfu_threshold}')
+
+    def lfu_threshold_checked(self, item):
+        return self.lfu_threshold == int(str(item).split(' / ')[-1])
 
     def set_sweep_interval(self, _, _item):
         item = str(_item)
@@ -494,19 +517,19 @@ class TaskTray:
                 snt = 4
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
                 cache = dict()
-                print(f'{total:>10d} {lfmt(self.lfu_threshold)} ----')
+                print(f'{total:>10d} {lfmt(1 / self.lfu_threshold)} ----')
                 for sid in list(ars[:snt]) + list(ars[-snt:]):
-                    if sid not in cache:
+                    if sid in self.speakers and sid not in cache:
                         cache[sid] = True
                         print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]}')
 
                 lsid = ars[-1]
                 count = self.sweep_cache[lsid]
                 rate = count / total
-                if rate < self.lfu_threshold:
+                if rate < 1 / self.lfu_threshold:
                     begin = time.perf_counter()
                     self._sweep(lsid)
-                    logger.info(f'initialized lfu id {lsid} {lfmt(rate)}: {count:.{SIGD}f} / {total}')
+                    logger.info(f'initialized lfu id {lsid} {lfmt(rate)}: {count} / {total}')
                     del self.sweep_cache[lsid]
 
                     elapsed = time.perf_counter() - begin
@@ -538,11 +561,12 @@ class TaskTray:
                         query = spr.query
                         params = parse_qs(query)
                         speaker_id = params.get('speaker')[0]
-                        # usage count up
-                        count = self.sweep_cache.get(speaker_id, 0)
-                        self.sweep_cache.update({speaker_id: count + 1})
-                        # print(path, speaker_id)
-                        return
+                        if speaker_id in self.speakers:
+                            # usage count up
+                            count = self.sweep_cache.get(speaker_id, 0)
+                            self.sweep_cache.update({speaker_id: count + 1})
+                            # print(path, speaker_id)
+                            return
 
     def bridge(self, src, dst):
         try:
