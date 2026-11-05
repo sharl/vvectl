@@ -522,8 +522,8 @@ class TaskTray:
                 rate = count / total
                 if rate < 1 / self.lfu_threshold:
                     begin = time.perf_counter()
+                    logger.info(f'init lfu id {lsid}: {self.speakers[lsid]} {lfmt(rate)}: {count} / {total}')
                     self._sweep(lsid)
-                    logger.info(f'initialized lfu id {lsid}: {self.speakers[lsid]}  {lfmt(rate)}: {count} / {total}')
                     del self.sweep_cache[lsid]
 
                     elapsed = time.perf_counter() - begin
