@@ -329,28 +329,22 @@ class TaskTray:
         threading.Thread(target=self.sweep_loop, name=SWEEP_THREAD_NAME, daemon=True).start()
 
     def _sweep(self, speaker_id):
-        try:
-            for speaker in self.speakers:
-                for style in speaker['styles']:
-                    initialized = self.session.get(f'{self.server_url}/is_initialized_speaker?speaker={speaker_id}').json()
-                    if initialized:
-                        # すでにロード済みなら初期化する
-                        begin = time.perf_counter()
-                        self.session.post(
-                            f'{self.server_url}/initialize_speaker',
-                            params={
-                                'speaker': speaker_id,
-                                'skip_reinit': 'false'
-                            },
-                            timeout=5,
-                        )
-                        elapsed = time.perf_counter() - begin
-                        logger.info(f'initialized {self.speakers[speaker_id]} {elapsed:.1f}')
-                        sleep_time = max(0.1, SLOW_SWEEP_INTERVAL - elapsed)
-                        if self.sweep_stop_event.wait(sleep_time):
-                            break
-        except Exception:
-            pass
+        initialized = self.session.get(f'{self.server_url}/is_initialized_speaker?speaker={speaker_id}').json()
+        if initialized:
+            # すでにロード済みなら初期化する
+            begin = time.perf_counter()
+            self.session.post(
+                f'{self.server_url}/initialize_speaker',
+                params={
+                    'speaker': speaker_id,
+                    'skip_reinit': 'false'
+                },
+                timeout=5,
+            )
+            elapsed = time.perf_counter() - begin
+            logger.info(f'initialized {self.speakers[speaker_id]} {elapsed:.1f}')
+            sleep_time = max(0.1, SLOW_SWEEP_INTERVAL - elapsed)
+            self.sweep_stop_event.wait(sleep_time)
 
     def sweep_loop(self):
         logger.debug(f'start {SWEEP_THREAD_NAME}')
