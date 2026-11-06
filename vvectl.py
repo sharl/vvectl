@@ -508,16 +508,22 @@ class TaskTray:
 
                 self.count_total = total
 
-                snt = 4
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
-                cache = dict()
+                # 最低頻度の最後 last entried
+                lsid = ars[-1]
+                # 使用率しきい値未満になった最初の sid の場所を検索
+                for first_thr_index, lsid in enumerate(ars):
+                    if rates[lsid] < 1 / self.lfu_threshold:
+                        # 最低頻度の最初 first entried
+                        break
                 print(f'{total:>10d} {lfmt(1 / self.lfu_threshold)} ----')
-                for sid in list(ars[:snt]) + list(ars[-snt:]):
+
+                cache = dict()
+                for sid in ars[:5] + ars[first_thr_index:]:
                     if sid in self.speakers and sid not in cache:
                         cache[sid] = True
                         print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]}')
 
-                lsid = ars[-1]
                 count = self.sweep_cache[lsid]
                 rate = count / total
                 if rate < 1 / self.lfu_threshold:
