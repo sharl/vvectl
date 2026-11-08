@@ -524,9 +524,15 @@ class TaskTray:
                         cache[sid] = True
                         print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]}')
 
+                tsid = ars[0]
+                tcount = self.sweep_cache[tsid]
                 count = self.sweep_cache[lsid]
                 rate = count / total
-                if rate < 1 / self.lfu_threshold:
+                if (tsid != lsid) and (tcount - count > self.lfu_threshold / 2):
+                    logger.info(f'reset {tsid}:{self.speakers[tsid]}:{tcount}:{count}')
+                    self._sweep(tsid)
+                    del self.sweep_cache[tsid]
+                elif rate < 1 / self.lfu_threshold:
                     begin = time.perf_counter()
                     logger.info(f'init lfu id {lsid}: {self.speakers[lsid]} {lfmt(rate)}: {count} / {total}')
                     self._sweep(lsid)
