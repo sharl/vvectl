@@ -226,7 +226,7 @@ class TaskTray:
                 MenuItem(theme, self.set_theme, checked=lambda x: str(x) == self.theme),
             )
 
-        # Least Frequentli Used threshold submenu
+        # Least Frequently Used threshold submenu
         lfu_threshold_submenu = []
         for th in range(100, 1000 + 1, 100):
             lfu_threshold_submenu.append(
@@ -251,7 +251,7 @@ class TaskTray:
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
             Menu.SEPARATOR,
-            MenuItem('Least Frequentlu Used threshold', Menu(*lfu_threshold_submenu)),
+            MenuItem('Least Frequently Used threshold', Menu(*lfu_threshold_submenu)),
             MenuItem('Force Sweep interval', Menu(*sweep_interval_submenu)),
             Menu.SEPARATOR,
             MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
