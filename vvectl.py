@@ -251,7 +251,7 @@ class TaskTray:
             MenuItem('Manual Restart', lambda: self.restart_logic('Manual Restart')),
             MenuItem('Enable Idle Timeout', self.toggle_idle, checked=lambda _: self.enable_idle),
             Menu.SEPARATOR,
-            MenuItem('Least Frequently Used threshold', Menu(*lfu_threshold_submenu)),
+            MenuItem('Least Frequently Used Sweep threshold', Menu(*lfu_threshold_submenu)),
             MenuItem('Force Sweep interval', Menu(*sweep_interval_submenu)),
             Menu.SEPARATOR,
             MenuItem('Other Process VRAM threshold', Menu(*opv_threshold_submenu)),
