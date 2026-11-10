@@ -321,7 +321,7 @@ class TaskTray:
 
     def _detect_sweep_thread(self):
         threads = [th.name for th in threading.enumerate()]
-        logger.debug(f'running threads: {threads}')
+        # logger.debug(f'running threads: {threads}')
         return SWEEP_THREAD_NAME in threads
 
     def _start_sweep_thread(self):
@@ -347,7 +347,7 @@ class TaskTray:
             self.sweep_stop_event.wait(sleep_time)
 
     def sweep_loop(self):
-        logger.debug(f'start {SWEEP_THREAD_NAME}')
+        # logger.debug(f'start {SWEEP_THREAD_NAME}')
         self.sweep_cache.clear()
 
         while not self.sweep_stop_event.is_set():
@@ -363,7 +363,7 @@ class TaskTray:
             if self.sweep_stop_event.wait(sleep_time):
                 break
 
-        logger.debug(f'stopped {SWEEP_THREAD_NAME}')
+        # logger.debug(f'stopped {SWEEP_THREAD_NAME}')
 
     def set_lfu_threshold(self, _, item):
         lfu_threshold = int(str(item).split(' / ')[-1])
@@ -462,7 +462,7 @@ class TaskTray:
                         sid = str(style['id'])
                         name = f"{speaker['name']}({style['name']})"
                         self.speakers[sid] = name
-                logger.debug('update speakers')
+                # logger.debug('update speakers')
 
             idle_time = time.time() - self.last_access_time
             # VVE current usage, top process name, top process usage
