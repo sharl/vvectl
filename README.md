@@ -10,7 +10,15 @@ cd vvectl
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
-python vvectl.py
+pythonw vvectl.py
+```
+
+### Re-run
+
+```powershell
+cd vvectl
+.\.venv\Scripts\activate
+pythonw vvectl.py
 ```
 
 ## Build
