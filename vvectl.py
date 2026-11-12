@@ -167,6 +167,7 @@ class TaskTray:
         # sum sweep cache
         self.count_total = 0
         self.lfu_threshold = 200
+        self.topics = ''
 
         # 他プロセスが使用しているプロセス名と VRAM 使用量
         self.top_process_name = None
@@ -486,6 +487,8 @@ class TaskTray:
             # update tooltip
             perc = 100 * self.current_vram / self.limit
             topic = f'Limit: {self.limit} MB\n' if self.limit != self.vram_mb else ''
+            if self.topics:
+                topic += self.topics + '\n'
             if self.enable_idle:
                 self.app.title = f'{topic}VRAM: {self.current_vram:.1f} MB / {perc:.1f} % / Idle: {int(idle_time)}s'
             else:
@@ -509,14 +512,17 @@ class TaskTray:
                 self.count_total = total
 
                 ars = sorted(rates, key=lambda x: rates[x], reverse=True)
-                # 最低頻度の最後 last entried
+                # 最小発声回数の speaker id
                 lsid = ars[-1]
-                # 使用率しきい値未満になった最初の sid の場所を検索
-                for first_thr_index, lsid in enumerate(ars):
-                    if rates[lsid] < 1 / self.lfu_threshold:
-                        # 最低頻度の最初 first entried
+                first_thr_index = -1
+                min_count = min([self.sweep_cache[sid] for sid in self.sweep_cache])
+                for lsid in self.sweep_cache:
+                    if self.sweep_cache[lsid] == min_count:
                         break
-                print(f'{total:>10d} {lfmt(1 / self.lfu_threshold)} ----')
+                for first_thr_index, sid in enumerate(ars):
+                    if sid == lsid:
+                        break
+                print(f'{total:>10d} {lfmt(1 / self.lfu_threshold)} ---- {min_count=} {lsid=} {first_thr_index=}')
 
                 cache = dict()
                 for sid in ars[:5] + ars[first_thr_index:]:
@@ -527,6 +533,9 @@ class TaskTray:
                 tsid = ars[0]
                 tcount = self.sweep_cache[tsid]
                 count = self.sweep_cache[lsid]
+                # update tooltop info
+                self.topics = f'next {self.speakers[lsid]}'
+
                 rate = count / total
                 if (tsid != lsid) and (tcount - count > self.lfu_threshold / 2):
                     logger.info(f'reset {tsid}:{self.speakers[tsid]}:{tcount}:{count}')
@@ -534,7 +543,7 @@ class TaskTray:
                     del self.sweep_cache[tsid]
                 elif rate < 1 / self.lfu_threshold:
                     begin = time.perf_counter()
-                    logger.info(f'init lfu id {lsid}: {self.speakers[lsid]} {lfmt(rate)}: {count} / {total}')
+                    # logger.debug(f'init lfu id {lsid}: {self.speakers[lsid]} {lfmt(rate)}: {count} / {total}')
                     self._sweep(lsid)
                     del self.sweep_cache[lsid]
 
