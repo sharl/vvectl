@@ -164,6 +164,8 @@ class TaskTray:
         self.sweep_interval = 0                 # Never sweep
         # speaker_id: count
         self.sweep_cache = dict()
+        # speaker_id: time
+        self.query_time = dict()
         # sum sweep cache
         self.count_total = 0
         self.lfu_threshold = 200
@@ -352,9 +354,13 @@ class TaskTray:
             begin = time.perf_counter()
 
             # force sweep all speaker id
-            if self.sweep_interval:
-                for sid in self.speakers:
+            for sid in self.speakers:
+                last_query_time = self.query_time.get(sid, None)
+                if self.sweep_interval or (last_query_time is not None and (time.time() - last_query_time > IDLE_LIMIT)):
                     self._sweep(sid)
+                    if last_query_time:
+                        del self.query_time[sid]
+                    del self.sweep_cache[sid]
 
             elapsed = time.perf_counter() - begin
             sleep_time = max(1, self.sweep_interval - elapsed)
@@ -520,12 +526,14 @@ class TaskTray:
                     if sid == lsid:
                         break
                 print(f'{total:>10d} {lfmt(1 / self.lfu_threshold)} ---- {min_count=} {lsid=} {first_thr_index=}')
+                now = time.time()
 
                 cache = dict()
                 for sid in ars[:5] + ars[first_thr_index:]:
                     if sid in self.speakers and sid not in cache:
                         cache[sid] = True
-                        print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]}')
+                        latency = now - self.query_time[sid] if sid in self.query_time else 0
+                        print(f'{sid:>3} {self.sweep_cache[sid]:>6} {lfmt(rates[sid])} {self.speakers[sid]} {latency:.1f}s')
 
                 tsid = ars[0]
                 tcount = self.sweep_cache[tsid]
@@ -577,6 +585,10 @@ class TaskTray:
                             # usage count up
                             count = self.sweep_cache.get(speaker_id, 0)
                             self.sweep_cache.update({speaker_id: count + 1})
+                            # update last query time
+                            if speaker_id not in self.query_time:
+                                self.query_time[speaker_id] = 0
+                            self.query_time.update({speaker_id: time.time()})
                             # print(path, speaker_id)
                             return
 
