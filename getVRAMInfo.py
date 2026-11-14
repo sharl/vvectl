@@ -45,9 +45,9 @@ def get_vram_usages(target='Local'):
         pids[pid] = name
 
     _cmd = [
-        f'Get-Counter "\\GPU Process Memory(*)\\{target} Usage"',
+        f'Get-Counter "\\GPU Process Memory(*)\\{target} Usage" -ErrorAction SilentlyContinue',
         'Select-Object -ExpandProperty CounterSamples',
-        'ForEach-Object { "$($_.Path) : $($_.CookedValue)" }',
+        'ForEach-Object { "$($_.Path) : $($_.CookedValue)" }; exit 0',
     ]
     ps_cmd = ' | '.join(_cmd)
     result = subprocess.check_output(
