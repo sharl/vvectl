@@ -57,12 +57,15 @@ def get_vram_usages(target='Local'):
     )
     pattern = re.compile(r'pid_(\d+).*?:\s+(\d+)')
     usages = {}
+    used = 0
     for pid_str, usage_str in pattern.findall(result):
         pid = int(pid_str)
         if pid in pids:
             name = pids[pid]
             if name not in usages:
                 usages[name] = 0
-            usages[name] += int(usage_str)
+            mem = int(usage_str)
+            usages[name] += mem
+            used += mem
 
-    return usages
+    return usages, used
