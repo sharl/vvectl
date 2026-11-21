@@ -29,7 +29,7 @@ while True:
             begin = time.perf_counter()
 
             ps = []
-            usages = get_vram_usages(target=target)
+            usages, _ = get_vram_usages(target=target)
 
             used = 0
             for name in sorted(usages, key=lambda n: usages[n], reverse=True)[:lines - 2]:

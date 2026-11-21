@@ -418,7 +418,7 @@ class TaskTray:
         top_vram = 0
 
         try:
-            usages = get_vram_usages()
+            usages, _ = get_vram_usages()
             # find VVE and most usage process
             for name in sorted(usages, key=lambda n: usages[n]):
                 # desktop window manager と explorer は除外
