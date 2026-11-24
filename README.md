@@ -2,6 +2,8 @@
 
 Reduce VRAM consumption of VOICEVOX Engine with GPU
 
+![](Assets/Fig_run.png)
+
 ## Run
 
 ```powershell
